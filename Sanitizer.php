@@ -59,7 +59,7 @@ class Sanitizer
             } elseif (in_array($method, self::$_funcs['p1'])) {
                 $value = $method($value);
             } elseif (in_array($method, self::$_funcs['p2'])) {
-                $value = $method($value, $param);
+                $value = null === $param ? $method($value) : $method($value, $param);
             }
         }
         return $value;
