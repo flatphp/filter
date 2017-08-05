@@ -1,21 +1,24 @@
 {
-    "name": "flatphp/filter",
-    "description": "Validation and Sanitization etc.",
-    "keywords": ["validator", "validation", "sanitize"],
-    "license": "MIT",
-    "authors": [
-        {
-            "name": "Fred Yang",
-            "email": "shuky2000@163.com"
-        }
-    ],
-    "require": {
-	"php": ">=5.5"
-    },
-    "autoload": {
-        "psr-4": {
-            "Flatphp\\Filter\\": ""
-        }
-    },
-    "minimum-stability": "dev"
+  "name": "flatphp/filter",
+  "description": "Validation and Sanitization etc.",
+  "keywords": [
+    "validator",
+    "validation",
+    "sanitize"
+  ],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Fred Yang",
+      "email": "shuky2000@163.com"
+    }
+  ],
+  "require": {
+    "php": ">=5.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Flatphp\\Filter\\": ""
+    }
+  }
 }

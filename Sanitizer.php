@@ -1,10 +1,15 @@
 <?php namespace Flatphp\Filter;
 
+/**
+ * string|int|trim|rtrim:/|strtolower|strtoupper|float:2|array|bool|...
+ */
 class Sanitizer
 {
-    protected static $_funcs = array(
-        'p1' => ['intval', 'strtolower', 'strtoupper', 'addslashes'],
-        'p2' => ['trim', 'ltrim', 'rtrim', 'htmlspecialchars', 'strip_tags']
+    protected static $rels = array(
+        'integer' => 'int',
+        'boolean' => 'bool',
+        'lower' => 'strtolower',
+        'upper' => 'strtoupper'
     );
 
     /**
@@ -12,54 +17,58 @@ class Sanitizer
      * sanitize('test', 'upper|trim:/')
      *
      * multi values:
-     * sanitize(['aa' => 22.12, 'bb' => 34.1789], ['aa' => 'int', 'bb' => 'float:3'])
+     * sanitize(['aa' => 22.12, 'bb' => 34.1789], ['aa' => 'trim|upper', 'bb' => 'float:3'])
      *
-     * @param mixed $value
+     * @param mixed $data
      * @param mixed $rule
      * @return bool
      */
-    public static function sanitize($value, $rule)
+    public static function sanitize($data, $rules)
     {
-        if (is_array($rule)) {
-            foreach ($rule as $k=>$r) {
-                if (isset($value[$k])) {
-                    $value[$k] = self::_sanitizeOne($value[$k], $r);
+        if (is_array($rules)) {
+            foreach ($rules as $key => $rule) {
+                if (isset($data[$key])) {
+                    $data[$key] = self::sanitizeOne($data[$key], $rule);
                 }
             }
         } else {
-            $value = self::_sanitizeOne($value, $rule);
+            $data = self::sanitizeOne($data, $rules);
         }
-        return $value;
+        return $data;
     }
 
     /**
      * @param mixed $value
      * @param string $rule
      * @return mixed
+     * @throws \Exception
      */
-    protected static function _sanitizeOne($value, $rule)
+    protected static function sanitizeOne($value, $rule)
     {
-        // get all sanitizer methods
-        static $methods = null;
-        if (null === $methods) {
-            $methods = get_class_methods(get_called_class());
-        }
         $rule = explode('|', $rule);
         foreach ($rule as $method) {
             if (strpos($method, ':')) {
-                $p = strpos($method, ':');
-                $param = substr($method, $p + 1);
-                $method = trim(substr($method, 0, $p));
+                $method = explode(':', $method, 2);
+                $param = $method[1];
+                $method = trim($method[0]);
             } else {
-                $method = trim($method);
                 $param = null;
+                $method = trim($method);
             }
-            if (in_array($method, $methods)) {
-                $value = self::$method($value, $param);
-            } elseif (in_array($method, self::$_funcs['p1'])) {
-                $value = $method($value);
-            } elseif (in_array($method, self::$_funcs['p2'])) {
-                $value = null === $param ? $method($value) : $method($value, $param);
+            if (isset(self::$rels[$method])) {
+                $method = self::$rels[$method];
+            }
+            $self_method = 'to'. ucfirst($method);
+            if (method_exists(__CLASS__, $self_method)) {
+                $value = static::$self_method($value, $param);
+            } elseif (function_exists($method)) {
+                if (null === $param) {
+                    $value = $method($value);
+                } else {
+                    $value = $method($value, $param);
+                }
+            } else {
+                throw new \Exception('method '. $method .' not exists');
             }
         }
         return $value;
@@ -67,12 +76,79 @@ class Sanitizer
 
     /**
      * @param mixed $value
-     * @param int $decimals
+     * @param string $delimiter
+     * @return string
+     */
+    public static function toString($value, $delimiter = null)
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+        if (is_array($value)) {
+            if ($delimiter) {
+                return implode($delimiter, $value);
+            } else {
+                return self::toJson($value);
+            }
+        }
+        return (string)$value;
+    }
+
+    /**
+     * @param mixed $value
+     * @return int
+     */
+    public static function toInt($value)
+    {
+        return (int)$value;
+    }
+
+    /**
+     * @param mixed $value
+     * @param null $delimiter
+     * @return array
+     */
+    public static function toArray($value, $delimiter = null)
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if ($delimiter) {
+            return explode($delimiter, $value);
+        }
+        $res = json_decode($value, true);
+        if (json_last_error() == JSON_ERROR_NONE) {
+            return $res;
+        }
+        return [$value];
+    }
+
+    /**
+     * @param mixed $value
+     * @return string
+     */
+    public static function toJson($value)
+    {
+        return json_encode($value, JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * @param mixed $value
+     * @param int $scale
      * @return float|array
      */
-    public static function float($value, $decimals = 2)
+    public static function toFloat($value, $scale = 2)
     {
-        return number_format($value, $decimals, '.', '');
+        return number_format($value, $scale, '.', '');
+    }
+
+    /**
+     * @param mixed $value
+     * @return bool
+     */
+    public static function toBool($value)
+    {
+        return (bool)$value;
     }
 
     /**
@@ -86,15 +162,5 @@ class Sanitizer
             $chars = str_split($chars);
         }
         return str_replace($chars, '', $value);
-    }
-
-    /**
-     * strip ASCII value less than 32
-     * @param string $value
-     * @return string
-     */
-    public static function stripLow($value)
-    {
-        return filter_var($value, FILTER_UNSAFE_RAW, FILTER_FLAG_STRIP_LOW);
     }
 }

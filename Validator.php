@@ -2,83 +2,107 @@
 
 class Validator
 {
+    protected static $key;
+    protected static $msgkey;
+    protected static $msg;
+
     /**
      * single value:
-     * validate('test', 'required|email|length:10,20')
-     * validate('test', [
+     * validate('test', 'required|email|length:10,20', array(
      *     'required' => 'value is required',
-     *     'email' => 'value must be a valid email'
-     *     'length:10,20' => 'value length must in 10-20'
-     * ], $message)
+     *     'email' => 'value must be a valid email',
+     *     'length' => 'value length must in 10-20'
+     * ))
      *
      * multi values:
-     * validate(['aa' => 'hello', 'bb' => 'world'], 'required | string')
-     * validate(['aa' => 'hello', 'bb' => 'world'], ['aa' => 'required | string', 'bb' => 'in:1,2,3'])
+     * validate(['aa' => 'hello', 'bb' => 'world'], ['aa' => 'required | string', 'bb' => 'in:1,2,3'], array(
+     *     'aa.required' => 'aa is required',
+     *     'aa.string' => 'aa must be a string',
+     *     'bb.in' => 'bb must in 1,2,3'
+     * ))
      *
-     * multi values with message:
-     * validate(['aa' => 'hello', 'bb' => 'world'], [
-     *      'aa' => ['required' => 'aa is required', 'string' => 'aa must be a string'],
-     *      'bb' => ['in:1,2,3' => 'bb must in 1,2,3']
-     * ], $message)
-     *
-     * @param mixed $value
+     * @param mixed $data
      * @param mixed $rule
-     * @param string $message errmsg receive
+     * @param array|null $messages
      * @return bool
      * @throws \Exception
      */
-    public static function validate($value, $rule, &$message = '')
+    public static function validate($data, $rules, $messages = null)
     {
-        if (!is_array($value)) {
-            $value = [$value];
-            $rule = [$rule];
-        } elseif (is_array($value) && !is_array($rule)) {
-            $rule_str = $rule;
-            $rule = [];
-            foreach ($value as $k=>$v) {
-                $rule[$k] = $rule_str;
-            }
-        }
-
-        // get all validator methods
-        $methods = get_class_methods(get_called_class());
-
-        foreach ($rule as $k=>$item) {
-            if (!is_array($item)) {
-                $item = explode('|', $item);
-                $item = array_combine($item, array_fill(0, count($item), ''));
-            }
-            $v = isset($value[$k]) ? $value[$k] : null;
-            foreach ($item as $one => $msg) {
-                if (strpos($one, ':')) {
-                    $p = strpos($one, ':');
-                    $param = substr($one, $p+1);
-                    $method = trim(substr($one, 0, $p));
-                } else {
-                    $method = trim($one);
-                    $param = null;
-                }
-                if (!in_array($method, $methods)) {
-                    $method = 'is'. ucfirst($method);
-                    if (!in_array($method, $methods)) {
-                        throw new \Exception('Invalid validation method:'. $one);
-                    }
-                }
-                if (!self::$method($v, $param)) {
-                    $message = $msg;
+        if (is_array($rules)) {
+            foreach ($rules as $key => $rule) {
+                $value = isset($data[$key]) ? $data[$key] : null;
+                $res = self::validateOne($key, $value, $rule, $messages);
+                if (!$res) {
                     return false;
                 }
+            }
+        } else {
+            return self::validateOne(null, $data, $rules, $messages);
+        }
+        return true;
+    }
+
+    protected static function validateOne($key, $value, $rule, $messages = null)
+    {
+        $rule = explode('|', $rule);
+        foreach ($rule as $method) {
+            if (strpos($method, ':')) {
+                $method = explode(':', $method, 2);
+                $param = $method[1];
+                $method = trim($method[0]);
+            } else {
+                $param = null;
+                $method = trim($method);
+            }
+            $self_method = 'is'. ucfirst($method);
+            if (method_exists(__CLASS__, $self_method)) {
+                $res = static::$self_method($value, $param);
+            } elseif (function_exists($method)) {
+                if (null === $param) {
+                    $res = $method($value);
+                } else {
+                    $res = $method($value, $param);
+                }
+            } else {
+                throw new \Exception('method '. $method .' not exists');
+            }
+            if (!$res) {
+                self::$key = $key;
+                self::$msgkey = ($key === null) ? $method : ($key .'.'. $method);
+                if (isset($messages[self::$msgkey])) {
+                    self::$msg = $messages[self::$msgkey];
+                } else {
+                    self::$msg = self::$msgkey;
+                }
+                return false;
             }
         }
         return true;
     }
+
+    public static function getKey()
+    {
+        return self::$key;
+    }
+
+    public static function getMessageKey()
+    {
+        return self::$msgkey;
+    }
+
+    public static function getMessage()
+    {
+        return self::$msg;
+    }
+
 
     /**
      * Not empty
      * @param mixed $value
      * @return bool
      */
-    public static function required($value)
+    public static function isRequired($value)
     {
         if (is_null($value)) {
             return false;
@@ -147,7 +171,7 @@ class Validator
      * @param string|array $param
      * @return bool
      */
-    public static function length($value, $param)
+    public static function isLength($value, $param)
     {
         if (!is_array($param)) {
             $param = explode(',', $param);
@@ -166,7 +190,7 @@ class Validator
      * @param string|array $param
      * @return bool
      */
-    public static function range($value, $param)
+    public static function isRange($value, $param)
     {
         if (!is_array($param)) {
             $param = explode(',', $param);
@@ -246,16 +270,6 @@ class Validator
 
     /**
      * @param mixed $value
-     * @param mixed $param
-     * @return bool
-     */
-    public static function isSameCi($value, $param)
-    {
-        return strtolower($value) === strtolower($param);
-    }
-
-    /**
-     * @param mixed $value
      * @return bool
      */
     public static function isIp($value)
@@ -279,7 +293,7 @@ class Validator
      * @param array|string $param
      * @return bool
      */
-    public static function in($value, $param)
+    public static function isIn($value, $param)
     {
         if (!is_array($param)) {
             $param = explode(',', $param);
@@ -288,16 +302,12 @@ class Validator
     }
 
     /**
-     * If not in array
      * @param mixed $value
      * @param array|string $param
      * @return bool
      */
-    public static function notin($value, $param)
+    public static function isNotin($value, $param)
     {
-        if (!is_array($param)) {
-            $param = explode(',', $param);
-        }
-        return !in_array($value, $param);
+        return !static::isIn($value, $param);
     }
 }
