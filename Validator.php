@@ -5,6 +5,7 @@ class Validator
     protected static $key;
     protected static $msgkey;
     protected static $msg;
+    protected static $customs = [];
 
     /**
      * single value:
@@ -22,7 +23,7 @@ class Validator
      * ))
      *
      * @param mixed $data
-     * @param mixed $rule
+     * @param mixed $rules
      * @param array|null $messages
      * @return bool
      * @throws \Exception
@@ -32,18 +33,18 @@ class Validator
         if (is_array($rules)) {
             foreach ($rules as $key => $rule) {
                 $value = isset($data[$key]) ? $data[$key] : null;
-                $res = self::validateOne($key, $value, $rule, $messages);
+                $res = self::validateOne($value, $rule, $messages, $key);
                 if (!$res) {
                     return false;
                 }
             }
         } else {
-            return self::validateOne(null, $data, $rules, $messages);
+            return self::validateOne($data, $rules, $messages);
         }
         return true;
     }
 
-    protected static function validateOne($key, $value, $rule, $messages = null)
+    public static function validateOne($value, $rule, $messages = null, $key = null)
     {
         $rule = explode('|', $rule);
         foreach ($rule as $method) {
@@ -56,7 +57,10 @@ class Validator
                 $method = trim($method);
             }
             $self_method = 'is'. ucfirst($method);
-            if (method_exists(__CLASS__, $self_method)) {
+            if (isset(self::$customs[$method])) {
+                $custom = self::$customs[$method];
+                $res = $custom($value, $param);
+            } elseif (method_exists(__CLASS__, $self_method)) {
                 $res = static::$self_method($value, $param);
             } elseif (function_exists($method)) {
                 if (null === $param) {
@@ -81,19 +85,29 @@ class Validator
         return true;
     }
 
-    public static function getKey()
+    public static function getFailedKey()
     {
         return self::$key;
     }
 
-    public static function getMessageKey()
+    public static function getFailedOn()
     {
         return self::$msgkey;
     }
 
-    public static function getMessage()
+    public static function getFailedMessage()
     {
         return self::$msg;
+    }
+
+
+    /**
+     * @param string $key
+     * @param callable $call
+     */
+    public static function reg($key, callable $call)
+    {
+        self::$customs[$key] = $call;
     }
 
 

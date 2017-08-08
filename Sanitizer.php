@@ -12,6 +12,8 @@ class Sanitizer
         'upper' => 'strtoupper'
     );
 
+    protected static $customs = [];
+
     /**
      * single value:
      * sanitize('test', 'upper|trim:/')
@@ -20,7 +22,7 @@ class Sanitizer
      * sanitize(['aa' => 22.12, 'bb' => 34.1789], ['aa' => 'trim|upper', 'bb' => 'float:3'])
      *
      * @param mixed $data
-     * @param mixed $rule
+     * @param mixed $rules
      * @return bool
      */
     public static function sanitize($data, $rules)
@@ -43,7 +45,7 @@ class Sanitizer
      * @return mixed
      * @throws \Exception
      */
-    protected static function sanitizeOne($value, $rule)
+    public static function sanitizeOne($value, $rule)
     {
         $rule = explode('|', $rule);
         foreach ($rule as $method) {
@@ -59,7 +61,10 @@ class Sanitizer
                 $method = self::$rels[$method];
             }
             $self_method = 'to'. ucfirst($method);
-            if (method_exists(__CLASS__, $self_method)) {
+            if (isset(self::$customs[$method])) {
+                $custom = self::$customs[$method];
+                $value = $custom($value, $param);
+            } elseif (method_exists(__CLASS__, $self_method)) {
                 $value = static::$self_method($value, $param);
             } elseif (function_exists($method)) {
                 if (null === $param) {
@@ -72,6 +77,15 @@ class Sanitizer
             }
         }
         return $value;
+    }
+
+    /**
+     * @param string $key
+     * @param callable $call
+     */
+    public static function reg($key, callable $call)
+    {
+        self::$customs[$key] = $call;
     }
 
     /**
